@@ -21,6 +21,7 @@ from homeassistant.helpers import selector
 
 from .bacnet_stack import BacnetError, check_port_free
 from .const import (
+    CONF_DESCRIPTION,
     CONF_DEVICE_INSTANCE,
     CONF_DEVICE_NAME,
     CONF_DEVICES,
@@ -28,12 +29,15 @@ from .const import (
     CONF_FOREIGN_BBMD,
     CONF_FOREIGN_TTL,
     CONF_INTERFACE,
+    CONF_LOCATION,
+    CONF_MODEL_NAME,
     CONF_PORT,
     CONF_SCAN_INTERVAL,
     CONF_WRITE_PRIORITY,
     DEFAULT_DEVICE_NAME,
     DEFAULT_DISCOVERY_TIMEOUT,
     DEFAULT_FOREIGN_TTL,
+    DEFAULT_MODEL_NAME,
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_WRITE_PRIORITY,
@@ -408,15 +412,33 @@ class BacnetOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
+            for key in (CONF_MODEL_NAME, CONF_LOCATION, CONF_DESCRIPTION):
+                user_input[key] = (user_input.get(key) or "").strip()
+            if not user_input[CONF_MODEL_NAME]:
+                user_input[CONF_MODEL_NAME] = DEFAULT_MODEL_NAME
             return self.async_create_entry(data={**self._options, **user_input})
+        opts = self._options
+        text = selector.TextSelector()
         return self.async_show_form(
             step_id="settings",
             data_schema=vol.Schema(
                 {
                     vol.Required(
                         CONF_WRITE_PRIORITY,
-                        default=self._options.get(CONF_WRITE_PRIORITY, DEFAULT_WRITE_PRIORITY),
+                        default=opts.get(CONF_WRITE_PRIORITY, DEFAULT_WRITE_PRIORITY),
                     ): vol.All(vol.Coerce(int), vol.Range(min=1, max=16)),
+                    vol.Optional(
+                        CONF_MODEL_NAME,
+                        default=opts.get(CONF_MODEL_NAME) or DEFAULT_MODEL_NAME,
+                    ): text,
+                    vol.Optional(
+                        CONF_LOCATION,
+                        description={"suggested_value": opts.get(CONF_LOCATION, "")},
+                    ): text,
+                    vol.Optional(
+                        CONF_DESCRIPTION,
+                        description={"suggested_value": opts.get(CONF_DESCRIPTION, "")},
+                    ): text,
                 }
             ),
         )

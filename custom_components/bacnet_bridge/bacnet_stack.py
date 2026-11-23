@@ -143,6 +143,9 @@ class BacnetStack:
         device_name: str,
         foreign_bbmd: str | None = None,
         foreign_ttl: int = 300,
+        model_name: str = "",
+        location: str = "",
+        description: str = "",
     ) -> None:
         self.interface = interface
         self.port = port
@@ -150,6 +153,9 @@ class BacnetStack:
         self.device_name = device_name
         self.foreign_bbmd = foreign_bbmd or None
         self.foreign_ttl = foreign_ttl
+        self.model_name = model_name
+        self.location = location
+        self.description = description
         self.app: Application | None = None
         # Devices that rejected ReadPropertyMultiple; fall back to single reads.
         self._no_rpm: set[str] = set()
@@ -179,6 +185,7 @@ class BacnetStack:
             vendoridentifier=VENDOR_IDENTIFIER,
         )
         self.app = Application.from_args(args)
+        self._set_device_properties()
         # BACpypes3 opens its UDP endpoints in background tasks that retry
         # forever. Wait for them so a failure surfaces here, and so close()
         # never races a socket that is still being opened.
@@ -198,6 +205,24 @@ class BacnetStack:
             self.device_instance,
             self.foreign_bbmd,
         )
+
+    def _set_device_properties(self) -> None:
+        """Fill model-name, location and description of HA's device object.
+
+        Empty location/description are left out so readers get unknown-property
+        rather than an empty string.
+        """
+        device = getattr(self.app, "device_object", None)
+        if device is None:
+            _LOGGER.warning("BACnet device object not found; model name not set")
+            return
+        for prop, value in (
+            ("modelName", self.model_name),
+            ("location", self.location),
+            ("description", self.description),
+        ):
+            if value:
+                setattr(device, prop, value[:255])
 
     def close(self) -> None:
         """Stop outstanding requests and close the sockets.

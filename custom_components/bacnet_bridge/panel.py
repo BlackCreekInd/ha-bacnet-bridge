@@ -131,6 +131,8 @@ def ws_status(
                 "instance": data[CONF_DEVICE_INSTANCE],
                 "interface": data[CONF_INTERFACE],
                 "port": data.get(CONF_PORT, DEFAULT_PORT),
+                "model": runtime.stack.model_name,
+                "location": runtime.stack.location,
             },
             "devices": devices,
             "published": [

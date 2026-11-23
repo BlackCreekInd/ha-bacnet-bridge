@@ -86,7 +86,13 @@
       },
       "settings": {
         "title": "Settings",
-        "data": { "write_priority": "Priority for writes to commandable objects (1 = highest, 16 = lowest)" }
+        "description": "Model name, location and description are the values other BACnet tools show for Home Assistant's device. Saving reloads the integration.",
+        "data": {
+          "write_priority": "Priority for writes to commandable objects (1 = highest, 16 = lowest)",
+          "model_name": "Model name",
+          "location": "Location (optional)",
+          "description": "Description (optional)"
+        }
       }
     },
     "error": {

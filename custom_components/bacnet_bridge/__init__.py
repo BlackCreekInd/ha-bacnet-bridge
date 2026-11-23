@@ -13,6 +13,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .bacnet_stack import BacnetStack
 from .const import (
+    CONF_DESCRIPTION,
     CONF_DEVICE_INSTANCE,
     CONF_DEVICE_NAME,
     CONF_DEVICES,
@@ -20,9 +21,12 @@ from .const import (
     CONF_FOREIGN_BBMD,
     CONF_FOREIGN_TTL,
     CONF_INTERFACE,
+    CONF_LOCATION,
+    CONF_MODEL_NAME,
     CONF_PORT,
     CONF_WRITE_PRIORITY,
     DEFAULT_FOREIGN_TTL,
+    DEFAULT_MODEL_NAME,
     DEFAULT_PORT,
     DEFAULT_WRITE_PRIORITY,
     DOMAIN,
@@ -63,6 +67,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: BacnetConfigEntry) -> bo
         device_name=data[CONF_DEVICE_NAME],
         foreign_bbmd=data.get(CONF_FOREIGN_BBMD) or None,
         foreign_ttl=data.get(CONF_FOREIGN_TTL, DEFAULT_FOREIGN_TTL),
+        model_name=entry.options.get(CONF_MODEL_NAME) or DEFAULT_MODEL_NAME,
+        location=entry.options.get(CONF_LOCATION, ""),
+        description=entry.options.get(CONF_DESCRIPTION, ""),
     )
     try:
         await stack.start()
@@ -84,7 +91,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BacnetConfigEntry) -> bo
         identifiers={(DOMAIN, "local")},
         name=f"{data[CONF_DEVICE_NAME]} (BACnet device {data[CONF_DEVICE_INSTANCE]})",
         manufacturer="Home Assistant",
-        model="BACnet Bridge",
+        model=entry.options.get(CONF_MODEL_NAME) or DEFAULT_MODEL_NAME,
     )
 
     priority = entry.options.get(CONF_WRITE_PRIORITY, DEFAULT_WRITE_PRIORITY)

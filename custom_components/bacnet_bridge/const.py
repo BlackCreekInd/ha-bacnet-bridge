@@ -19,12 +19,17 @@ CONF_DEVICES: Final = "devices"  # {device_instance (str): DeviceConfig}
 CONF_EXPOSED: Final = "exposed_entities"  # [entity_id, ...]
 CONF_WRITE_PRIORITY: Final = "write_priority"
 CONF_SCAN_INTERVAL: Final = "scan_interval"
+# Properties of HA's own BACnet device object (editable under Settings).
+CONF_MODEL_NAME: Final = "model_name"
+CONF_LOCATION: Final = "location"
+CONF_DESCRIPTION: Final = "description"
 
 DEFAULT_PORT: Final = 47808
 DEFAULT_DEVICE_NAME: Final = "Home Assistant"
 DEFAULT_FOREIGN_TTL: Final = 300
 DEFAULT_WRITE_PRIORITY: Final = 16
 DEFAULT_SCAN_INTERVAL: Final = 30  # seconds
+DEFAULT_MODEL_NAME: Final = "Home Assistant BACnet Bridge"
 DEFAULT_DISCOVERY_TIMEOUT: Final = 5  # seconds
 
 # BACnet vendor id 999 is reserved for testing. Register a real id with
