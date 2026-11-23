@@ -1,0 +1,104 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Home Assistant as a BACnet/IP device",
+        "description": "Home Assistant joins the BACnet network as its own device. It uses this device to discover and read other BACnet devices, and to publish the entities you choose later.",
+        "data": {
+          "interface": "Network interface (address/prefix)",
+          "port": "UDP port",
+          "device_instance": "Device instance",
+          "device_name": "Device name",
+          "foreign_bbmd": "BBMD address for foreign device registration (optional)",
+          "foreign_ttl": "Foreign device registration time-to-live (seconds)"
+        },
+        "data_description": {
+          "interface": "The prefix sets the broadcast address used for discovery, e.g. 192.168.1.50/24.",
+          "device_instance": "Must be unique on the whole BACnet network (0 to 4194302).",
+          "foreign_bbmd": "Leave empty when the BACnet devices are on the same subnet as Home Assistant. Otherwise enter the BBMD as IP or IP:port."
+        }
+      },
+      "reconfigure": {
+        "title": "Change BACnet network settings",
+        "data": {
+          "interface": "Network interface (address/prefix)",
+          "port": "UDP port",
+          "device_instance": "Device instance",
+          "device_name": "Device name",
+          "foreign_bbmd": "BBMD address for foreign device registration (optional)",
+          "foreign_ttl": "Foreign device registration time-to-live (seconds)"
+        }
+      }
+    },
+    "error": {
+      "invalid_interface": "Enter an IPv4 address with prefix, e.g. 192.168.1.50/24.",
+      "invalid_bbmd": "Enter an IPv4 address, optionally with :port.",
+      "port_in_use": "That UDP port is already in use on this address. Is another BACnet integration or add-on running?"
+    },
+    "abort": {
+      "single_instance_allowed": "BACnet Bridge is already set up.",
+      "reconfigure_successful": "Network settings updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "BACnet Bridge",
+        "menu_options": {
+          "add_device": "Discover and add a BACnet device",
+          "remove_devices": "Remove BACnet devices",
+          "expose": "Publish Home Assistant entities over BACnet",
+          "settings": "Settings"
+        }
+      },
+      "add_device": {
+        "title": "Discover BACnet devices",
+        "description": "Leave everything empty to broadcast Who-Is on the local subnet. Enter an IP address to ask one device directly.",
+        "data": {
+          "target": "Device address (optional)",
+          "low_limit": "Lowest device instance (optional)",
+          "high_limit": "Highest device instance (optional)",
+          "timeout": "Wait for answers (seconds)"
+        }
+      },
+      "pick_device": {
+        "title": "Choose a device",
+        "description": "{count} new device(s) answered.",
+        "data": { "device": "Device" }
+      },
+      "pick_objects": {
+        "title": "Choose objects",
+        "description": "{device} has {count} supported objects. Each chosen object becomes an entity; the recorder keeps its history.",
+        "data": {
+          "objects": "Objects to add",
+          "writable": "Allow Home Assistant to write to",
+          "scan_interval": "Poll interval (seconds)"
+        }
+      },
+      "remove_devices": {
+        "title": "Remove BACnet devices",
+        "data": { "devices": "Devices to remove" }
+      },
+      "expose": {
+        "title": "Publish entities over BACnet",
+        "description": "Sensors and binary sensors become read-only analog and binary inputs. Numbers become writable analog values; switches, input booleans, lights and fans become writable binary values.",
+        "data": { "exposed_entities": "Entities" }
+      },
+      "settings": {
+        "title": "Settings",
+        "data": { "write_priority": "Priority for writes to commandable objects (1 = highest, 16 = lowest)" }
+      }
+    },
+    "error": {
+      "limits_pair": "Enter both instance limits or neither.",
+      "discovery_failed": "Discovery failed. Check the address and the logs.",
+      "no_devices_found": "No new devices answered."
+    },
+    "abort": {
+      "not_loaded": "BACnet Bridge is not running. Check the logs, then try again.",
+      "cannot_read_device": "Could not read the device's object list.",
+      "no_supported_objects": "The device has no analog, binary or multi-state objects.",
+      "no_devices_configured": "No BACnet devices are configured."
+    }
+  }
+}
