@@ -14,6 +14,7 @@ Built on [BACpypes3](https://github.com/JoelBender/BACpypes3) (MIT). Status: fir
 | Setup | Config flow asks for network interface (address/prefix), UDP port (47808), device instance and name. Optional BBMD address and TTL for foreign device registration. Network settings can be changed later with **Reconfigure**. |
 | Discovery | Options → *Discover and add a BACnet device*. Broadcast Who-Is on the local subnet, or a directed Who-Is to one IP, with optional instance range. |
 | Objects | Reads the device's object list (falls back to element-by-element for large lists), then names, units, state texts and current values, so you can choose objects. |
+| Editing devices | Options → *Edit a BACnet device*. Keep or drop objects, change which are writable, rename objects and the device, change the poll interval, and add objects that weren't added before. New objects are read from the device's saved address with no new discovery. Entities for dropped objects are removed. |
 | Client entities | analog → `sensor` (or `number` when marked writable); binary → `binary_sensor` (or `switch`); multi-state → `sensor` with state texts (or `select`). Units map to HA units and device classes; analog sensors have `state_class: measurement` for long-term statistics. |
 | Polling | ReadPropertyMultiple in small chunks, falls back to ReadProperty for devices without RPM. Poll interval per device. An offline device makes its entities unavailable without blocking HA startup. |
 | Writes | Writes present-value. Commandable objects (those with a priority array) are written at the configured priority (default 16). |
@@ -67,7 +68,6 @@ The tests start a simulated BACnet device on `127.0.0.1:47809` and HA's stack on
 * COV subscriptions instead of polling where devices support it.
 * Read min/max-pres-value for number ranges; relinquish (write null) support.
 * Foreign device registration is wired into setup; next is testing against a real BBMD and showing registration status.
-* Per-object options after adding a device (rename, add/remove objects without re-discovering).
 * Publish more entity types (climate setpoints, multi-state for select/input_select), and choose by HA label as well as by list.
 * Diagnostics download and a `bacnet_bridge.write_property` service for advanced writes.
 * Trend log objects and schedules, if needed.

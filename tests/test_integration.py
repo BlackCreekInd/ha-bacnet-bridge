@@ -12,6 +12,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
 from custom_components.bacnet_bridge.const import (
@@ -140,6 +141,82 @@ async def test_discover_add_poll_and_write(hass: HomeAssistant, sim_device) -> N
     await coordinator.async_refresh()
     await hass.async_block_till_done()
     assert hass.states.get("sensor.simulated_ahu_supply_temp").state == "unavailable"
+
+    await _unload(hass, entry)
+
+
+async def _add_sim_device(hass: HomeAssistant, entry: MockConfigEntry, objects, writable) -> None:
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "add_device"})
+    flow = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {"target": SIM_ADDRESS, "timeout": 2}
+    )
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"device": str(SIM_INSTANCE)})
+    flow = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {"objects": objects, "writable": writable, "scan_interval": 30}
+    )
+    assert flow["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+
+async def test_edit_device_objects(hass: HomeAssistant, sim_device) -> None:
+    entry = await _setup_entry(hass)
+    await _add_sim_device(
+        hass, entry, ["analog-value,1", "analog-value,2", "multi-state-value,1"], ["analog-value,2"]
+    )
+    registry = er.async_get(hass)
+    uid = lambda oid: f"{SIM_INSTANCE}-{oid.replace(',', '-')}"  # noqa: E731
+    assert registry.async_get_entity_id("number", DOMAIN, uid("analog-value,2"))
+    assert registry.async_get_entity_id("sensor", DOMAIN, uid("multi-state-value,1"))
+
+    # One device configured: the menu goes straight to its options.
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"next_step_id": "edit_device"})
+    assert flow["step_id"] == "device_options", flow
+
+    bad = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {"objects": [], "scan_interval": 30}
+    )
+    assert bad["errors"] == {"objects": "no_objects_kept"}
+
+    # Drop MSV 1, make AV 2 read-only, then rename and look for more objects.
+    flow = await hass.config_entries.options.async_configure(
+        flow["flow_id"],
+        {
+            "name": "AHU 1",
+            "objects": ["analog-value,1", "analog-value,2"],
+            "writable": [],
+            "scan_interval": 60,
+            "rename": True,
+            "find_more": True,
+        },
+    )
+    assert flow["step_id"] == "rename_objects", flow
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {"AV 1": "Supply air"})
+    assert flow["step_id"] == "add_objects", flow
+    assert flow["description_placeholders"]["count"] == "2"  # BV 1 and the dropped MSV 1
+    flow = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {"objects": ["binary-value,1"], "writable": ["binary-value,1"]}
+    )
+    assert flow["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    device = entry.options[CONF_DEVICES][str(SIM_INSTANCE)]
+    assert device["name"] == "AHU 1"
+    assert device["scan_interval"] == 60
+    by_id = {o["object_id"]: o for o in device["objects"]}
+    assert set(by_id) == {"analog-value,1", "analog-value,2", "binary-value,1"}
+    assert by_id["analog-value,1"]["name"] == "Supply air"
+    assert by_id["analog-value,2"]["writable"] is False
+    assert by_id["binary-value,1"]["writable"] is True
+
+    # Removed and re-platformed entities are gone from the registry.
+    assert registry.async_get_entity_id("sensor", DOMAIN, uid("multi-state-value,1")) is None
+    assert registry.async_get_entity_id("number", DOMAIN, uid("analog-value,2")) is None
+    assert registry.async_get_entity_id("sensor", DOMAIN, uid("analog-value,2"))
+    assert registry.async_get_entity_id("switch", DOMAIN, uid("binary-value,1"))
+    supply = registry.async_get_entity_id("sensor", DOMAIN, uid("analog-value,1"))
+    assert hass.states.get(supply).attributes["friendly_name"].endswith("Supply air")
 
     await _unload(hass, entry)
 

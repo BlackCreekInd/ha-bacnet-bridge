@@ -19,7 +19,7 @@ from homeassistant.config_entries import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
 
-from .bacnet_stack import BacnetError, check_port_free
+from .bacnet_stack import BacnetError, check_port_free, split_object_id
 from .const import (
     CONF_DESCRIPTION,
     CONF_DEVICE_INSTANCE,
@@ -125,6 +125,46 @@ def _validate_network(user_input: dict[str, Any]) -> dict[str, str]:
     return errors
 
 
+def _object_label(obj: Any) -> str:
+    """'AI 1 · Zone temp (21.5 °C)' for a discovered ObjectInfo."""
+    text = f"{TYPE_ABBREVIATIONS[obj.object_type]} {obj.instance} · {obj.name}"
+    if obj.present_value is not None:
+        value = obj.present_value
+        if obj.state_text and isinstance(value, int) and 1 <= value <= len(obj.state_text):
+            value = obj.state_text[value - 1]
+        unit = bacnet_to_ha(obj.units)[0]
+        text += f" ({value}{' ' + unit if unit else ''})"
+    return text
+
+
+def _object_choice_schema(objects: list[Any]) -> dict[Any, Any]:
+    """'objects' and 'writable' pickers for discovered objects."""
+    object_options = [
+        selector.SelectOptionDict(value=obj.object_id, label=_object_label(obj)) for obj in objects
+    ]
+    writable_options = [
+        selector.SelectOptionDict(value=obj.object_id, label=_object_label(obj))
+        for obj in objects
+        if obj.object_type in WRITABLE_CANDIDATE_TYPES
+    ]
+    schema: dict[Any, Any] = {
+        vol.Required("objects", default=[]): selector.SelectSelector(
+            selector.SelectSelectorConfig(options=object_options, multiple=True)
+        ),
+    }
+    if writable_options:
+        schema[vol.Optional("writable", default=[])] = selector.SelectSelector(
+            selector.SelectSelectorConfig(options=writable_options, multiple=True)
+        )
+    return schema
+
+
+def _configured_object_key(obj: dict[str, Any]) -> str:
+    """'AV 2', the field name for a configured object on the rename form."""
+    obj_type, inst = split_object_id(obj["object_id"])
+    return f"{TYPE_ABBREVIATIONS.get(obj_type, obj_type)} {inst}"
+
+
 class BacnetConfigFlow(ConfigFlow, domain=DOMAIN):
     """Set up HA's own BACnet/IP device."""
 
@@ -183,6 +223,15 @@ class BacnetOptionsFlow(OptionsFlow):
         self._found: dict[str, Any] = {}
         self._device: Any = None
         self._objects: list[Any] = []
+        # Edit-device state: key of the device being edited, a working copy of
+        # its config, what the user asked for next, and objects found on it
+        # that are not configured yet (None = not read yet).
+        self._edit_key: str | None = None
+        self._edit: dict[str, Any] = {}
+        self._rename_next = False
+        self._find_more = False
+        self._new_objects: list[Any] | None = None
+        self._read_failed = False
 
     @property
     def _options(self) -> dict[str, Any]:
@@ -191,7 +240,7 @@ class BacnetOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["add_device", "remove_devices", "expose", "settings"],
+            menu_options=["add_device", "edit_device", "remove_devices", "expose", "settings"],
         )
 
     # ----- add a remote device -----
@@ -318,33 +367,7 @@ class BacnetOptionsFlow(OptionsFlow):
             }
             return self.async_create_entry(data={**self._options, CONF_DEVICES: devices})
 
-        def label(obj) -> str:
-            text = f"{TYPE_ABBREVIATIONS[obj.object_type]} {obj.instance} · {obj.name}"
-            if obj.present_value is not None:
-                value = obj.present_value
-                if obj.state_text and isinstance(value, int) and 1 <= value <= len(obj.state_text):
-                    value = obj.state_text[value - 1]
-                unit = bacnet_to_ha(obj.units)[0]
-                text += f" ({value}{' ' + unit if unit else ''})"
-            return text
-
-        object_options = [
-            selector.SelectOptionDict(value=obj.object_id, label=label(obj)) for obj in self._objects
-        ]
-        writable_options = [
-            selector.SelectOptionDict(value=obj.object_id, label=label(obj))
-            for obj in self._objects
-            if obj.object_type in WRITABLE_CANDIDATE_TYPES
-        ]
-        schema: dict[Any, Any] = {
-            vol.Required("objects", default=[]): selector.SelectSelector(
-                selector.SelectSelectorConfig(options=object_options, multiple=True)
-            ),
-        }
-        if writable_options:
-            schema[vol.Optional("writable", default=[])] = selector.SelectSelector(
-                selector.SelectSelectorConfig(options=writable_options, multiple=True)
-            )
+        schema = _object_choice_schema(self._objects)
         schema[vol.Required(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL)] = vol.All(
             vol.Coerce(int), vol.Range(min=5, max=3600)
         )
@@ -354,6 +377,203 @@ class BacnetOptionsFlow(OptionsFlow):
             description_placeholders={
                 "device": f"{self._device.name} (instance {self._device.instance})",
                 "count": str(len(self._objects)),
+            },
+        )
+
+    # ----- edit a configured remote device -----
+
+    async def async_step_edit_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        devices = self._options.get(CONF_DEVICES, {})
+        if not devices:
+            return self.async_abort(reason="no_devices_configured")
+        if user_input is None and len(devices) == 1:
+            user_input = {"device": next(iter(devices))}
+        if user_input is not None:
+            self._edit_key = user_input["device"]
+            device = devices[self._edit_key]
+            self._edit = {**device, "objects": [dict(o) for o in device["objects"]]}
+            return await self.async_step_device_options()
+        options = [
+            selector.SelectOptionDict(
+                value=key, label=f"{d.get('name')} (instance {d['instance']}) · {d['address']}"
+            )
+            for key, d in devices.items()
+        ]
+        return self.async_show_form(
+            step_id="edit_device",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("device"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=options, mode=selector.SelectSelectorMode.LIST
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_device_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        dev = self._edit
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            keep = set(user_input.get("objects", []))
+            if not keep:
+                errors["objects"] = "no_objects_kept"
+            else:
+                writable = set(user_input.get("writable", []))
+                dev["name"] = (user_input.get("name") or "").strip() or dev.get("name") or ""
+                dev[CONF_SCAN_INTERVAL] = user_input[CONF_SCAN_INTERVAL]
+                dev["objects"] = [
+                    {**obj, "writable": obj["object_id"] in writable}
+                    for obj in dev["objects"]
+                    if obj["object_id"] in keep
+                ]
+                self._rename_next = bool(user_input.get("rename"))
+                self._find_more = bool(user_input.get("find_more"))
+                return await self._async_edit_next()
+
+        objects = dev["objects"]
+
+        def label(obj: dict[str, Any]) -> str:
+            return f"{_configured_object_key(obj)} · {obj.get('name')}"
+
+        object_options = [
+            selector.SelectOptionDict(value=o["object_id"], label=label(o)) for o in objects
+        ]
+        writable_options = [
+            selector.SelectOptionDict(value=o["object_id"], label=label(o))
+            for o in objects
+            if split_object_id(o["object_id"])[0] in WRITABLE_CANDIDATE_TYPES
+        ]
+        schema: dict[Any, Any] = {
+            vol.Optional("name", default=dev.get("name") or ""): selector.TextSelector(),
+            vol.Required(
+                "objects", default=[o["object_id"] for o in objects]
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=object_options, multiple=True)
+            ),
+        }
+        if writable_options:
+            schema[
+                vol.Optional(
+                    "writable",
+                    default=[o["value"] for o in writable_options if self._is_writable(o["value"])],
+                )
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(options=writable_options, multiple=True)
+            )
+        schema[
+            vol.Required(
+                CONF_SCAN_INTERVAL, default=dev.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            )
+        ] = vol.All(vol.Coerce(int), vol.Range(min=5, max=3600))
+        schema[vol.Optional("rename", default=False)] = selector.BooleanSelector()
+        schema[vol.Optional("find_more", default=False)] = selector.BooleanSelector()
+        return self.async_show_form(
+            step_id="device_options",
+            data_schema=vol.Schema(schema),
+            errors=errors,
+            description_placeholders={
+                "device": f"{dev.get('name')} (instance {dev['instance']})",
+                "count": str(len(objects)),
+            },
+        )
+
+    def _is_writable(self, object_id: str) -> bool:
+        return any(
+            o["object_id"] == object_id and o.get("writable") for o in self._edit["objects"]
+        )
+
+    async def _async_edit_next(self) -> ConfigFlowResult:
+        """Go to the next step the user asked for, or save."""
+        if self._rename_next:
+            return await self.async_step_rename_objects()
+        if self._find_more:
+            return await self.async_step_add_objects()
+        return self._async_save_edit()
+
+    @callback
+    def _async_save_edit(self) -> ConfigFlowResult:
+        devices = dict(self._options.get(CONF_DEVICES, {}))
+        devices[self._edit_key] = self._edit
+        return self.async_create_entry(data={**self._options, CONF_DEVICES: devices})
+
+    async def async_step_rename_objects(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        objects = self._edit["objects"]
+        if user_input is not None:
+            for obj in objects:
+                name = (user_input.get(_configured_object_key(obj)) or "").strip()
+                if name:
+                    obj["name"] = name
+            self._rename_next = False
+            return await self._async_edit_next()
+        # Field names are the object labels ("AV 2"); with no translation for
+        # them, the frontend shows the field name itself.
+        schema = {
+            vol.Optional(
+                _configured_object_key(obj), default=obj.get("name") or ""
+            ): selector.TextSelector()
+            for obj in objects
+        }
+        return self.async_show_form(
+            step_id="rename_objects",
+            data_schema=vol.Schema(schema),
+            description_placeholders={"device": self._edit.get("name") or ""},
+        )
+
+    async def async_step_add_objects(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        dev = self._edit
+        if self._new_objects is None:
+            self._new_objects = []
+            if self.config_entry.state is not ConfigEntryState.LOADED:
+                self._read_failed = True
+            else:
+                # Read the object list straight from the stored address: no
+                # Who-Is, and only the objects not configured yet are described.
+                stack = self.config_entry.runtime_data.stack
+                configured = {o["object_id"] for o in dev["objects"]}
+                try:
+                    object_ids = await stack.read_object_list(dev["address"], dev["instance"])
+                    self._new_objects = await stack.describe_objects(
+                        dev["address"], [oid for oid in object_ids if oid not in configured]
+                    )
+                except BacnetError as err:
+                    _LOGGER.warning("Reading objects of %s failed: %s", dev["address"], err)
+                    self._read_failed = True
+
+        if user_input is not None:
+            chosen = set(user_input.get("objects", []))
+            writable = set(user_input.get("writable", []))
+            dev["objects"].extend(
+                {**obj.as_dict(), "writable": obj.object_id in writable}
+                for obj in self._new_objects
+                if obj.object_id in chosen
+            )
+            return self._async_save_edit()
+
+        errors: dict[str, str] = {}
+        schema: dict[Any, Any] = {}
+        if self._read_failed:
+            errors["base"] = "cannot_read_device"
+        elif not self._new_objects:
+            errors["base"] = "no_new_objects"
+        else:
+            schema = _object_choice_schema(self._new_objects)
+        return self.async_show_form(
+            step_id="add_objects",
+            data_schema=vol.Schema(schema),
+            errors=errors,
+            description_placeholders={
+                "device": dev.get("name") or "",
+                "count": str(len(self._new_objects)),
             },
         )
 

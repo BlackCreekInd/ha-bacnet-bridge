@@ -8,11 +8,15 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    entity_registry as er,
+)
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
-from .bacnet_stack import BacnetStack
+from .bacnet_stack import BacnetStack, split_object_id
 from .const import (
     CONF_DESCRIPTION,
     CONF_DEVICE_INSTANCE,
@@ -34,7 +38,7 @@ from .const import (
 )
 from .coordinator import BacnetDeviceCoordinator
 from .panel import async_register_panel, async_remove_panel, async_setup_panel_support
-from .platforms import PLATFORMS
+from .platforms import PLATFORMS, platform_for
 from .server import BacnetServer
 
 _LOGGER = logging.getLogger(__name__)
@@ -103,6 +107,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BacnetConfigEntry) -> bo
         BacnetDeviceCoordinator(hass, entry, stack, device, priority)
         for device in entry.options.get(CONF_DEVICES, {}).values()
     ]
+    _async_remove_stale_entities(hass, entry)
     _async_remove_stale_devices(hass, entry)
     entry.runtime_data = BacnetRuntimeData(stack, server, coordinators)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -117,6 +122,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: BacnetConfigEntry) -> bo
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await async_register_panel(hass)
     return True
+
+
+def _async_remove_stale_entities(hass: HomeAssistant, entry: BacnetConfigEntry) -> None:
+    """Drop registry entities for objects removed in the options.
+
+    Turning "writable" on or off moves an object to another platform (sensor to
+    number, say); the entity on the old platform is dropped too.
+    """
+    registry = er.async_get(hass)
+    expected: set[tuple[str, str]] = set()
+    for device in entry.options.get(CONF_DEVICES, {}).values():
+        for obj in device["objects"]:
+            platform = platform_for(obj)
+            if platform is None:
+                continue
+            obj_type, inst = split_object_id(obj["object_id"])
+            expected.add((str(platform), f"{device['instance']}-{obj_type}-{inst}"))
+    for reg in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if (reg.domain, reg.unique_id) not in expected:
+            registry.async_remove(reg.entity_id)
 
 
 def _async_remove_stale_devices(hass: HomeAssistant, entry: BacnetConfigEntry) -> None:

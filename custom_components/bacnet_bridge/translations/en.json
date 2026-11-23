@@ -46,6 +46,7 @@
         "title": "BACnet Bridge",
         "menu_options": {
           "add_device": "Discover and add a BACnet device",
+          "edit_device": "Edit a BACnet device (objects, names, poll interval)",
           "remove_devices": "Remove BACnet devices",
           "expose": "Publish Home Assistant entities over BACnet",
           "settings": "Settings"
@@ -75,6 +76,37 @@
           "scan_interval": "Poll interval (seconds)"
         }
       },
+      "edit_device": {
+        "title": "Edit a BACnet device",
+        "data": { "device": "Device" }
+      },
+      "device_options": {
+        "title": "Edit {device}",
+        "description": "{count} object(s) are added. Unticking an object removes its entity. Changing whether an object is writable replaces its entity (for example, a sensor becomes a number). Saving reloads the integration.",
+        "data": {
+          "name": "Device name",
+          "objects": "Objects to keep",
+          "writable": "Allow Home Assistant to write to",
+          "scan_interval": "Poll interval (seconds)",
+          "rename": "Rename objects next",
+          "find_more": "Look for objects on the device that aren't added yet"
+        },
+        "data_description": {
+          "find_more": "Reads the object list from the device's saved address. No discovery broadcast is sent."
+        }
+      },
+      "rename_objects": {
+        "title": "Rename objects",
+        "description": "These names become the entity names on {device}. Entity IDs don't change. A name you set under the entity's own settings in Home Assistant takes precedence."
+      },
+      "add_objects": {
+        "title": "Add objects",
+        "description": "{count} object(s) on {device} aren't added yet. Choose any to add, then submit to save all your changes.",
+        "data": {
+          "objects": "Objects to add",
+          "writable": "Allow Home Assistant to write to"
+        }
+      },
       "remove_devices": {
         "title": "Remove BACnet devices",
         "data": { "devices": "Devices to remove" }
@@ -98,7 +130,10 @@
     "error": {
       "limits_pair": "Enter both instance limits or neither.",
       "discovery_failed": "Discovery failed. Check the address and the logs.",
-      "no_devices_found": "No new devices answered."
+      "no_devices_found": "No new devices answered.",
+      "no_objects_kept": "Keep at least one object. To drop the whole device, use Remove BACnet devices.",
+      "cannot_read_device": "Could not read the device's object list. Submit to save your other changes anyway.",
+      "no_new_objects": "Every supported object on this device is already added. Submit to save your other changes."
     },
     "abort": {
       "not_loaded": "BACnet Bridge is not running. Check the logs, then try again.",
