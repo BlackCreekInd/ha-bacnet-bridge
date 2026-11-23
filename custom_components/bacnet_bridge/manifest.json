@@ -3,7 +3,7 @@
   "name": "BACnet Bridge",
   "codeowners": ["@BlackCreekInd"],
   "config_flow": true,
-  "dependencies": ["network"],
+  "dependencies": ["frontend", "http", "network", "panel_custom", "websocket_api"],
   "documentation": "https://github.com/BlackCreekInd/ha-bacnet-bridge",
   "integration_type": "hub",
   "iot_class": "local_polling",
@@ -11,5 +11,5 @@
   "loggers": ["bacpypes3"],
   "requirements": ["bacpypes3==0.1.0"],
   "single_config_entry": true,
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

@@ -8,7 +8,8 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers.typing import ConfigType
 
 from .bacnet_stack import BacnetStack
 from .const import (
@@ -27,10 +28,19 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import BacnetDeviceCoordinator
+from .panel import async_register_panel, async_remove_panel, async_setup_panel_support
 from .platforms import PLATFORMS
 from .server import BacnetServer
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Serve the sidebar panel's files and its websocket API."""
+    await async_setup_panel_support(hass)
+    return True
 
 
 @dataclass
@@ -94,6 +104,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BacnetConfigEntry) -> bo
             hass, coordinator.async_refresh(), f"{DOMAIN} first poll {coordinator.name}"
         )
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    await async_register_panel(hass)
     return True
 
 
@@ -116,6 +127,7 @@ async def _async_update_listener(hass: HomeAssistant, entry: BacnetConfigEntry) 
 async def async_unload_entry(hass: HomeAssistant, entry: BacnetConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        async_remove_panel(hass)
         entry.runtime_data.server.async_stop()
         entry.runtime_data.stack.close()
     return unloaded

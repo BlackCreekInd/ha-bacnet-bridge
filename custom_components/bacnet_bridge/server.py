@@ -115,6 +115,10 @@ class BacnetServer:
             self._unsub()
             self._unsub = None
 
+    def published_objects(self) -> dict[str, str]:
+        """entity_id -> "analog-input,3" for the objects currently on the BACnet device."""
+        return {eid: self._instances[eid] for eid in self._objects}
+
     def _next_object_id(self, obj_type: str) -> str:
         used = {
             int(oid.split(",")[1])
