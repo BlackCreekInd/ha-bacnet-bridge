@@ -146,6 +146,7 @@ class BacnetStack:
         model_name: str = "",
         location: str = "",
         description: str = "",
+        software_version: str = "",
     ) -> None:
         self.interface = interface
         self.port = port
@@ -156,6 +157,7 @@ class BacnetStack:
         self.model_name = model_name
         self.location = location
         self.description = description
+        self.software_version = software_version
         self.app: Application | None = None
         # Devices that rejected ReadPropertyMultiple; fall back to single reads.
         self._no_rpm: set[str] = set()
@@ -207,7 +209,7 @@ class BacnetStack:
         )
 
     def _set_device_properties(self) -> None:
-        """Fill model-name, location and description of HA's device object.
+        """Fill model-name, location, description and software version.
 
         Empty location/description are left out so readers get unknown-property
         rather than an empty string.
@@ -220,6 +222,7 @@ class BacnetStack:
             ("modelName", self.model_name),
             ("location", self.location),
             ("description", self.description),
+            ("applicationSoftwareVersion", self.software_version),
         ):
             if value:
                 setattr(device, prop, value[:255])

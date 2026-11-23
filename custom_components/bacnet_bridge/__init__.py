@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.loader import async_get_integration
 
 from .bacnet_stack import BacnetStack
 from .const import (
@@ -60,6 +61,7 @@ type BacnetConfigEntry = ConfigEntry[BacnetRuntimeData]
 async def async_setup_entry(hass: HomeAssistant, entry: BacnetConfigEntry) -> bool:
     """Start HA's BACnet device, poll remote devices, expose entities."""
     data = entry.data
+    version = str((await async_get_integration(hass, DOMAIN)).version or "")
     stack = BacnetStack(
         interface=data[CONF_INTERFACE],
         port=data.get(CONF_PORT, DEFAULT_PORT),
@@ -70,6 +72,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BacnetConfigEntry) -> bo
         model_name=entry.options.get(CONF_MODEL_NAME) or DEFAULT_MODEL_NAME,
         location=entry.options.get(CONF_LOCATION, ""),
         description=entry.options.get(CONF_DESCRIPTION, ""),
+        software_version=version,
     )
     try:
         await stack.start()
@@ -92,6 +95,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BacnetConfigEntry) -> bo
         name=f"{data[CONF_DEVICE_NAME]} (BACnet device {data[CONF_DEVICE_INSTANCE]})",
         manufacturer="Home Assistant",
         model=entry.options.get(CONF_MODEL_NAME) or DEFAULT_MODEL_NAME,
+        sw_version=version or None,
     )
 
     priority = entry.options.get(CONF_WRITE_PRIORITY, DEFAULT_WRITE_PRIORITY)

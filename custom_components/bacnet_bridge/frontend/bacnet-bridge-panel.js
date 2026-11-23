@@ -139,7 +139,7 @@ class BacnetBridgePanel extends HTMLElement {
     let html = `
       <div class="card">
         <h2>${esc(local.name)} <span class="muted">· BACnet device ${esc(local.instance)}</span></h2>
-        <div class="meta">${[local.model, local.location].filter(Boolean).map(esc).join(" · ")}</div>
+        <div class="meta">${[local.model, local.location, local.version && `v${local.version}`].filter(Boolean).map(esc).join(" · ")}</div>
         <div class="meta">Interface ${esc(local.interface)} · UDP ${esc(local.port)} · ${s.devices.length} remote device(s) · ${s.published.length} published entit${s.published.length === 1 ? "y" : "ies"}</div>
         ${this._error ? `<div class="err">Last refresh failed: ${esc(this._error)}</div>` : ""}
       </div>`;

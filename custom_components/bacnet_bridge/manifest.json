@@ -11,5 +11,5 @@
   "loggers": ["bacpypes3"],
   "requirements": ["bacpypes3==0.1.0"],
   "single_config_entry": true,
-  "version": "0.3.0"
+  "version": "0.2.1"
 }
