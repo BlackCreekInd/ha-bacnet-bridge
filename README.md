@@ -71,6 +71,8 @@ The tests start a simulated BACnet device on `127.0.0.1:47809` and HA's stack on
 * Publish more entity types (climate setpoints, multi-state for select/input_select), and choose by HA label as well as by list.
 * Diagnostics download and a `bacnet_bridge.write_property` service for advanced writes.
 * Trend log objects and schedules, if needed.
+* Store discovered objects to quickly add them by editing the device later on. Alternatively: Rescan devices that are already added (update objects if already added?)
+* Add secondary BACnet UDP port (47809)
 # BACnet-Bridge
 # ha-bacnet-bridge
 # ha-bacnet-bridge
